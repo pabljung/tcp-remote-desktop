@@ -50,8 +50,10 @@ servidor abre a porta `5000` e aguarda uma única conexão TCP, sem trocar dados
 ## Regra de commits
 
 O projeto possui um hook Git em `.githooks/pre-commit` que permite commits
-somente na branch `main`. Para ativá-lo depois de clonar o repositório, execute
-na raiz do repositório:
+somente na branch `main` e bloqueia o commit quando o build falha. O hook usa o
+Maven Wrapper ou Maven quando disponível e, como alternativa, compila os fontes
+com Java 17. Para ativá-lo depois de clonar o repositório, execute na raiz do
+repositório:
 
 ```bash
 git config core.hooksPath .githooks

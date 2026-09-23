@@ -9,4 +9,39 @@ if [ "$current_branch" != "$allowed_branch" ]; then
     exit 1
 fi
 
+repository_root="$(git rev-parse --show-toplevel)" || exit 1
+project_directory="$repository_root/tcp-remote-desktop"
+
+echo "Validando o build antes do commit..."
+
+if [ -x "$project_directory/mvnw" ]; then
+    (cd "$project_directory" && ./mvnw --quiet verify)
+elif command -v mvn >/dev/null 2>&1; then
+    (cd "$project_directory" && mvn --quiet verify)
+elif command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -ExecutionPolicy Bypass \
+        -File "$repository_root/.githooks/build-java.ps1" \
+        -ProjectDirectory "$project_directory"
+elif command -v javac >/dev/null 2>&1 \
+    && command -v mkdir >/dev/null 2>&1 \
+    && command -v find >/dev/null 2>&1 \
+    && command -v xargs >/dev/null 2>&1; then
+    build_directory="$(git rev-parse --git-path pre-commit-build)" || exit 1
+    mkdir -p "$build_directory" || exit 1
+
+    find "$project_directory/src/main/java" -name '*.java' -print \
+        | xargs javac --release 17 -encoding UTF-8 -d "$build_directory"
+else
+    echo "Commit bloqueado: não foi encontrado um ambiente capaz de executar o build." >&2
+    exit 1
+fi
+
+build_status=$?
+
+if [ "$build_status" -ne 0 ]; then
+    echo "Commit bloqueado: o build falhou. Corrija os erros e tente novamente." >&2
+    exit "$build_status"
+fi
+
+echo "Build concluído com sucesso."
 exit 0
