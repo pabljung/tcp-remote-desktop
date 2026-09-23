@@ -44,4 +44,15 @@ Após compilar, em outro terminal:
 java -cp target/classes com.remotedesktop.client.ClientApplication
 ```
 
-Por enquanto, cada aplicação apenas imprime uma mensagem de identificação e encerra.
+Por enquanto, o cliente apenas imprime uma mensagem de identificação. O
+servidor abre a porta `5000` e aguarda uma única conexão TCP, sem trocar dados.
+
+## Regra de commits
+
+O projeto possui um hook Git em `.githooks/pre-commit` que permite commits
+somente na branch `main`. Para ativá-lo depois de clonar o repositório, execute
+na raiz do repositório:
+
+```bash
+git config core.hooksPath .githooks
+```

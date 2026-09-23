@@ -1,0 +1,12 @@
+#!/bin/sh
+
+allowed_branch="main"
+current_branch="$(git symbolic-ref --quiet --short HEAD)"
+
+if [ "$current_branch" != "$allowed_branch" ]; then
+    echo "Commit bloqueado: este projeto aceita commits somente na branch '$allowed_branch'." >&2
+    echo "Branch atual: ${current_branch:-HEAD destacado}" >&2
+    exit 1
+fi
+
+exit 0
