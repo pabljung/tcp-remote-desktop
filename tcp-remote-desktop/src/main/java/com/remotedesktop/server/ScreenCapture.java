@@ -34,6 +34,14 @@ public final class ScreenCapture {
         return robot.createScreenCapture(screenBounds);
     }
 
+    public int getScreenWidth() {
+        return screenBounds.width;
+    }
+
+    public int getScreenHeight() {
+        return screenBounds.height;
+    }
+
     public List<ScreenTile> splitIntoTiles(BufferedImage image, int tileSize) {
         if (image == null) {
             throw new IllegalArgumentException("A imagem nao pode ser nula.");

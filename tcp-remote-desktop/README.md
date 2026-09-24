@@ -2,15 +2,15 @@
 
 Projeto acadêmico em Java para estudar a construção gradual de um software simples de acesso remoto via TCP, inspirado conceitualmente em VNC e RDP.
 
-**Status: Estrutura inicial / Em desenvolvimento**
+**Status: Protótipo funcional / Em desenvolvimento**
 
 ## Tecnologias
 
 - Java 17
 - Maven
-- APIs nativas do Java, futuramente incluindo TCP, Swing/AWT, `Robot` e `BufferedImage`
+- APIs nativas do Java: TCP, Swing/AWT, `Robot` e `BufferedImage`
 
-## Funcionalidades planejadas
+## Funcionalidades implementadas
 
 - captura e divisão da tela em blocos;
 - transmissão dos blocos por TCP;
@@ -18,7 +18,8 @@ Projeto acadêmico em Java para estudar a construção gradual de um software si
 - detecção de blocos alterados;
 - envio de movimentos e cliques do mouse ao servidor.
 
-Essas funcionalidades ainda **não estão implementadas**. O projeto contém somente o esqueleto inicial para estudo.
+Cada bloco é enviado separadamente com posição, dimensões e bytes PNG. A tela
+completa nunca é serializada ou transmitida como um único objeto.
 
 ## Compilar
 
@@ -44,8 +45,22 @@ Após compilar, em outro terminal:
 java -cp target/classes com.remotedesktop.client.ClientApplication
 ```
 
-Por enquanto, o cliente apenas imprime uma mensagem de identificação. O
-servidor abre a porta `5000` e aguarda uma única conexão TCP, sem trocar dados.
+Para conectar em outro computador, informe o IP e opcionalmente a porta:
+
+```bash
+java -cp target/classes com.remotedesktop.client.ClientApplication 192.168.0.10 5000
+```
+
+O servidor aceita um cliente por execução. A janela do cliente mostra a tela
+remota; movimentos e cliques feitos sobre ela são reproduzidos no servidor.
+
+## Limitações e segurança
+
+- captura apenas a tela principal;
+- atende somente um cliente por execução;
+- não possui autenticação nem criptografia;
+- foi desenvolvido para estudo e deve ser usado somente em uma rede local confiável;
+- firewall e permissões do sistema operacional podem bloquear a porta ou o uso de `Robot`.
 
 ## Regra de commits
 

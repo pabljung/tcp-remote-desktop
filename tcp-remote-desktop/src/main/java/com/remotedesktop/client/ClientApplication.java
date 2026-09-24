@@ -5,20 +5,25 @@ import com.remotedesktop.protocol.MessageType;
 import javax.imageio.ImageIO;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+import java.awt.Point;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Cliente responsável por receber e exibir pequenos blocos da tela remota.
- *
- * <p>O protocolo nunca envia a tela como um objeto único. Depois de um
- * {@link MessageType#HANDSHAKE}, cada {@link MessageType#SCREEN_TILE} contém a
- * posição, as dimensões e somente os bytes de imagem daquele bloco.</p>
+ * Cliente que reconstrói a tela recebida em blocos e envia comandos do mouse.
  */
 public final class ClientApplication {
 
@@ -27,7 +32,6 @@ public final class ClientApplication {
     private static final int MAX_TILE_BYTES = 4 * 1024 * 1024;
 
     private ClientApplication() {
-        // Impede a instanciação da classe de inicialização.
     }
 
     public static void main(String[] args) {
@@ -36,15 +40,18 @@ public final class ClientApplication {
 
         System.out.println("Remote Desktop Client");
 
-        try (Socket clientSocket = new Socket(host, port);
-             DataInputStream input = new DataInputStream(clientSocket.getInputStream())) {
+        try (Socket socket = new Socket(host, port);
+             DataInputStream input = new DataInputStream(socket.getInputStream());
+             DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
 
             System.out.println("Connected to " + host + ":" + port);
-            ClientWindow window = createWindow();
+            ClientConnection connection = new ClientConnection(socket, output);
+            ClientWindow window = createWindow(connection);
 
             try {
                 receiveMessages(input, window.panel());
             } finally {
+                connection.closeWithoutMessage();
                 SwingUtilities.invokeLater(window.frame()::dispose);
             }
         } catch (IOException exception) {
@@ -54,9 +61,7 @@ public final class ClientApplication {
 
     private static void receiveMessages(DataInputStream input, RemoteScreenPanel panel)
             throws IOException {
-        boolean connected = true;
-
-        while (connected) {
+        while (true) {
             MessageType messageType;
 
             try {
@@ -66,22 +71,17 @@ public final class ClientApplication {
                 return;
             }
 
-            connected = switch (messageType) {
-                case HANDSHAKE -> {
-                    receiveHandshake(input, panel);
-                    yield true;
+            switch (messageType) {
+                case HANDSHAKE -> receiveHandshake(input, panel);
+                case SCREEN_TILE -> receiveScreenTile(input, panel);
+                case DISCONNECT -> {
+                    System.out.println("Server requested disconnection.");
+                    return;
                 }
-                case SCREEN_TILE -> {
-                    receiveScreenTile(input, panel);
-                    yield true;
-                }
-                case DISCONNECT -> false;
                 case MOUSE_MOVE, MOUSE_CLICK ->
                         throw new IOException("Unexpected server message: " + messageType);
-            };
+            }
         }
-
-        System.out.println("Server requested disconnection.");
     }
 
     private static MessageType readMessageType(DataInputStream input) throws IOException {
@@ -133,6 +133,75 @@ public final class ClientApplication {
         }
     }
 
+    private static ClientWindow createWindow(ClientConnection connection) throws IOException {
+        ClientWindow[] result = new ClientWindow[1];
+
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                RemoteScreenPanel panel = new RemoteScreenPanel();
+                installMouseControl(panel, connection);
+
+                JFrame frame = new JFrame("TCP Remote Desktop");
+                frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+                frame.setContentPane(panel);
+                frame.setSize(1024, 768);
+                frame.setLocationRelativeTo(null);
+                frame.addWindowListener(new WindowAdapter() {
+                    @Override
+                    public void windowClosing(WindowEvent event) {
+                        connection.disconnect();
+                        frame.dispose();
+                    }
+                });
+                frame.setVisible(true);
+                result[0] = new ClientWindow(frame, panel);
+            });
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while creating the client window", exception);
+        } catch (InvocationTargetException exception) {
+            throw new IOException("Could not create the client window", exception.getCause());
+        }
+
+        return result[0];
+    }
+
+    private static void installMouseControl(
+            RemoteScreenPanel panel,
+            ClientConnection connection) {
+        panel.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent event) {
+                sendMousePosition(panel, connection, event);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent event) {
+                sendMousePosition(panel, connection, event);
+            }
+        });
+
+        panel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                Point remotePoint = panel.toRemotePoint(event.getX(), event.getY());
+                if (remotePoint != null) {
+                    connection.sendMouseClick(remotePoint.x, remotePoint.y, event.getButton());
+                }
+            }
+        });
+    }
+
+    private static void sendMousePosition(
+            RemoteScreenPanel panel,
+            ClientConnection connection,
+            MouseEvent event) {
+        Point remotePoint = panel.toRemotePoint(event.getX(), event.getY());
+        if (remotePoint != null) {
+            connection.sendMouseMove(remotePoint.x, remotePoint.y);
+        }
+    }
+
     private static int readPositiveInt(DataInputStream input, String fieldName)
             throws IOException {
         int value = input.readInt();
@@ -151,30 +220,6 @@ public final class ClientApplication {
         return value;
     }
 
-    private static ClientWindow createWindow() throws IOException {
-        ClientWindow[] result = new ClientWindow[1];
-
-        try {
-            SwingUtilities.invokeAndWait(() -> {
-                RemoteScreenPanel panel = new RemoteScreenPanel();
-                JFrame frame = new JFrame("TCP Remote Desktop");
-                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-                frame.setContentPane(panel);
-                frame.setSize(1024, 768);
-                frame.setLocationRelativeTo(null);
-                frame.setVisible(true);
-                result[0] = new ClientWindow(frame, panel);
-            });
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while creating the client window", exception);
-        } catch (InvocationTargetException exception) {
-            throw new IOException("Could not create the client window", exception.getCause());
-        }
-
-        return result[0];
-    }
-
     private static int parsePort(String value) {
         try {
             int port = Integer.parseInt(value);
@@ -188,5 +233,83 @@ public final class ClientApplication {
     }
 
     private record ClientWindow(JFrame frame, RemoteScreenPanel panel) {
+    }
+
+    private static final class ClientConnection {
+
+        private final Socket socket;
+        private final DataOutputStream output;
+        private final AtomicBoolean open = new AtomicBoolean(true);
+
+        private ClientConnection(Socket socket, DataOutputStream output) {
+            this.socket = socket;
+            this.output = output;
+        }
+
+        private synchronized void sendMouseMove(int x, int y) {
+            if (!open.get()) {
+                return;
+            }
+
+            try {
+                output.writeUTF(MessageType.MOUSE_MOVE.name());
+                output.writeInt(x);
+                output.writeInt(y);
+                output.flush();
+            } catch (IOException exception) {
+                fail(exception);
+            }
+        }
+
+        private synchronized void sendMouseClick(int x, int y, int button) {
+            if (!open.get()) {
+                return;
+            }
+
+            try {
+                output.writeUTF(MessageType.MOUSE_CLICK.name());
+                output.writeInt(x);
+                output.writeInt(y);
+                output.writeInt(button);
+                output.flush();
+            } catch (IOException exception) {
+                fail(exception);
+            }
+        }
+
+        private synchronized void disconnect() {
+            if (!open.getAndSet(false)) {
+                return;
+            }
+
+            try {
+                output.writeUTF(MessageType.DISCONNECT.name());
+                output.flush();
+            } catch (IOException exception) {
+                System.err.println("Could not send disconnect message: " + exception.getMessage());
+            } finally {
+                closeSocket();
+            }
+        }
+
+        private synchronized void closeWithoutMessage() {
+            if (open.getAndSet(false)) {
+                closeSocket();
+            }
+        }
+
+        private void fail(IOException exception) {
+            System.err.println("Could not send mouse command: " + exception.getMessage());
+            open.set(false);
+            closeSocket();
+        }
+
+        private void closeSocket() {
+            try {
+                socket.close();
+            } catch (IOException exception) {
+                System.err.println("Could not close client socket: " + exception.getMessage());
+            }
+        }
     }
 }

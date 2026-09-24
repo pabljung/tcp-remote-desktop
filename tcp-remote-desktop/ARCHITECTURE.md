@@ -1,10 +1,10 @@
-# Arquitetura planejada
+# Arquitetura
 
-Este documento descreve a arquitetura **futura** do projeto. No estado atual, os componentes existem somente como um esqueleto e os fluxos abaixo ainda não foram implementados.
+Este documento descreve a arquitetura atual do protótipo e as extensões que ainda podem ser estudadas.
 
 ## Visão geral
 
-O sistema terá dois programas:
+O sistema possui dois programas:
 
 - **servidor**, executado no computador controlado, responsável por produzir a imagem da tela e aplicar comandos de entrada;
 - **cliente**, executado no computador controlador, responsável por exibir a tela remota e capturar interações do usuário.
@@ -55,7 +55,7 @@ COMPUTADOR CONTROLADOR
  reconstrução da imagem
 ```
 
-O `ScreenCapture` deverá futuramente capturar a tela e produzir blocos com posição, dimensões e dados de imagem. O cliente usará essas informações para desenhar cada região no local correto, formando visualmente a tela remota.
+O `ScreenCapture` captura a tela e produz blocos com posição, dimensões e dados de imagem. O cliente usa essas informações para desenhar cada região no local correto, formando visualmente a tela remota.
 
 ## Fluxo dos comandos do mouse
 
@@ -78,7 +78,7 @@ RemoteInputController
 Mouse do sistema operacional
 ```
 
-O cliente deverá transformar eventos do painel em mensagens do protocolo. O `RemoteInputController` receberá mensagens validadas e, no futuro, usará `java.awt.Robot` para executar a ação no computador controlado.
+O cliente transforma eventos do painel em mensagens do protocolo. O `RemoteInputController` recebe mensagens validadas e usa `java.awt.Robot` para executar a ação no computador controlado.
 
 ## Por que dividir a tela em blocos
 
@@ -103,7 +103,7 @@ imageData         bytes da imagem
 
 Blocos menores tornam as atualizações mais localizadas, mas aumentam a quantidade de metadados e comparações. Blocos maiores reduzem essa sobrecarga, mas podem retransmitir áreas inalteradas. O tamanho adequado deverá ser avaliado durante os estudos.
 
-## Protocolo futuro
+## Protocolo
 
 TCP entrega um fluxo contínuo de bytes, não mensagens prontas. Por isso, cliente e servidor deverão concordar com uma estrutura e uma ordem de leitura. Uma mensagem de bloco poderá ser organizada conceitualmente assim:
 
@@ -113,9 +113,9 @@ TCP entrega um fluxo contínuo de bytes, não mensagens prontas. Por isso, clien
 └──────────────┴───┴───┴─────────┴────────┴─────────────┴────────────┘
 ```
 
-`MessageType` representará a categoria da mensagem. `ProtocolMessage` é apenas o ponto de partida conceitual; campos e regras de serialização deverão ser definidos em uma etapa posterior.
+`MessageType` representa a categoria da mensagem. Os campos são escritos e lidos na mesma ordem com `DataOutputStream` e `DataInputStream`.
 
-## Responsabilidades planejadas
+## Responsabilidades
 
 ```text
 server/
@@ -132,19 +132,17 @@ protocol/
   ProtocolMessage           representa uma mensagem conceitual
 ```
 
-## Concorrência futura
+## Concorrência
 
-Captura, leitura da rede e interface gráfica possuem ritmos diferentes e poderão exigir Threads separadas. A interface Swing tem uma Thread própria, a Event Dispatch Thread, que deverá ser respeitada ao atualizar componentes visuais.
+Captura, leitura da rede e interface gráfica possuem ritmos diferentes. O servidor usa uma Thread para receber comandos enquanto transmite imagens, e o Swing mantém sua Event Dispatch Thread para a interface.
 
-Uma separação possível será:
+A separação utilizada é:
 
 ```text
 Servidor: captura/transmissão + recebimento de comandos
 Cliente:  recebimento de blocos + Event Dispatch Thread
 ```
 
-Essa separação será introduzida somente depois que cada fluxo funcionar isoladamente e de forma simples.
-
 ## Fora do escopo atual
 
-Ainda não existem sockets, captura real, divisão de imagens, serialização, comparação de frames, controle do mouse, compressão, autenticação ou criptografia. Esses assuntos pertencem às etapas futuras descritas em `TASKS.md`.
+O protótipo ainda não possui autenticação, criptografia, suporte completo a vários monitores, múltiplos clientes ou controle de teclado. A codificação PNG é usada somente por bloco e pode ser otimizada futuramente.

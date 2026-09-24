@@ -1,9 +1,8 @@
 package com.remotedesktop.client;
 
 import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
-import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 
 /**
@@ -20,12 +19,7 @@ public final class RemoteScreenPanel extends JPanel {
         }
 
         remoteScreen = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-
-        SwingUtilities.invokeLater(() -> {
-            setPreferredSize(new Dimension(width, height));
-            revalidate();
-            repaint();
-        });
+        repaint();
     }
 
     public synchronized void updateTile(int x, int y, BufferedImage tile) {
@@ -45,14 +39,26 @@ public final class RemoteScreenPanel extends JPanel {
             graphics.dispose();
         }
 
-        repaint(x, y, tile.getWidth(), tile.getHeight());
+        repaint();
+    }
+
+    public synchronized Point toRemotePoint(int panelX, int panelY) {
+        if (remoteScreen == null || getWidth() <= 0 || getHeight() <= 0) {
+            return null;
+        }
+
+        int remoteX = panelX * remoteScreen.getWidth() / getWidth();
+        int remoteY = panelY * remoteScreen.getHeight() / getHeight();
+        remoteX = Math.max(0, Math.min(remoteX, remoteScreen.getWidth() - 1));
+        remoteY = Math.max(0, Math.min(remoteY, remoteScreen.getHeight() - 1));
+        return new Point(remoteX, remoteY);
     }
 
     @Override
     protected synchronized void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
         if (remoteScreen != null) {
-            graphics.drawImage(remoteScreen, 0, 0, this);
+            graphics.drawImage(remoteScreen, 0, 0, getWidth(), getHeight(), this);
         }
     }
 }

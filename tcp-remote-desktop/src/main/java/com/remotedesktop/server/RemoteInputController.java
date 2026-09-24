@@ -47,7 +47,7 @@ public final class RemoteInputController {
     public void moveMouse(int x, int y) {
         checkEnabled();
         checkCoordinates(x, y);
-        robot.mouseMove(x, y);
+        robot.mouseMove(screenBounds.x + x, screenBounds.y + y);
     }
 
     // Parte 5: clicar com o mouse
@@ -57,7 +57,7 @@ public final class RemoteInputController {
 
         int buttonMask = getButtonMask(button);
 
-        robot.mouseMove(x, y);
+        robot.mouseMove(screenBounds.x + x, screenBounds.y + y);
         robot.mousePress(buttonMask);
 
         try {
@@ -75,7 +75,7 @@ public final class RemoteInputController {
     }
 
     private void checkCoordinates(int x, int y) {
-        if (!screenBounds.contains(x, y)) {
+        if (x < 0 || y < 0 || x >= screenBounds.width || y >= screenBounds.height) {
             throw new IllegalArgumentException(
                     "Coordenadas fora da tela: x=" + x + ", y=" + y);
         }
